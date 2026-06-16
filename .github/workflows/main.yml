@@ -1,0 +1,35 @@
+name: Roblox Yüzlerini Otomatik İndir
+
+on:
+  workflow_dispatch: # Bu seçenek senin butona basarak kodu manuel tetiklemeni sağlar
+
+permissions:
+  contents: write # GitHub'ın inen resimleri repoya geri yazabilmesi için izin veriyoruz
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Repoyu Klonla
+      uses: actions/checkout@v4
+
+    - name: Python Kur
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+
+    - name: Kütüphaneleri Yükle
+      run: |
+        python -m pip install --upgrade pip
+        pip install requests
+
+    - name: Python Scriptini Çalıştır
+      run: python indirici.py
+
+    - name: Değişiklikleri Repoya Commit Et ve Gönder
+      run: |
+        git config --global user.name "GitHub Action"
+        git config --global user.email "action@github.com"
+        git add yuzler/
+        git diff --staged --quiet || (git commit -m "Roblox yüzleri otomatik eklendi" && git push)
