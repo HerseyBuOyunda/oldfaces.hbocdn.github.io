@@ -1,10 +1,10 @@
 name: Roblox Yüzlerini Otomatik İndir
 
 on:
-  workflow_dispatch: # Bu seçenek senin butona basarak kodu manuel tetiklemeni sağlar
+  workflow_dispatch: # Manuel tetikleme butonu
 
 permissions:
-  contents: write # GitHub'ın inen resimleri repoya geri yazabilmesi için izin veriyoruz
+  contents: write # Repoya dosya yazma izni
 
 jobs:
   build:
@@ -27,9 +27,15 @@ jobs:
     - name: Python Scriptini Çalıştır
       run: python indirici.py
 
-    - name: Değişiklikleri Repoya Commit Et ve Gönder
+    - name: Değişiklikleri Güvenli Şekilde Commit Et ve Gönder
       run: |
         git config --global user.name "GitHub Action"
         git config --global user.email "action@github.com"
         git add yuzler/
-        git diff --staged --quiet || (git commit -m "Roblox yüzleri otomatik eklendi" && git push)
+        
+        # Eğer değişen bir şey yoksa çökmesini engellemek için '|| exit 0' ekliyoruz
+        git commit -m "Roblox yüzleri gerçek fotoğraflara dönüştürüldü" || exit 0
+        
+        # Gönderirken çakışma (conflict) olmasın diye pull yapıp sonra pushluyoruz
+        git pull --rebase
+        git push
