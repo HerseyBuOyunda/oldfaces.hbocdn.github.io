@@ -1,59 +1,58 @@
 import os
+import re
 import requests
 
 output_klasoru = "yuzler"
+# Eğer klasör yoksa oluşturuyoruz
 os.makedirs(output_klasoru, exist_ok=True)
 
 headers = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 }
 
-print("Roblox Kataloğundaki tüm yüzler taranıyor...")
+# 1. ADIM: Klasörde halihazırda duran XML/Kod içerikli dosyaları tarıyoruz
+dosyalar = [f for f in os.listdir(output_klasoru) if f.endswith('.png')]
 
-# Katalog arama API'si
-search_url = "https://catalog.roblox.com/v1/search/items/details?Category=11&Subcategory=5&AssetTypes=2&Limit=30"
+print(f"Klasörde incelenecek {len(dosyalar)} adet dosya bulundu.\n")
 
-yuz_id_listesi = []
-
-try:
-    response = requests.get(search_url, headers=headers, timeout=15)
-    if response.status_code == 200:
-        data = response.json()
-        for item in data.get("data", []):
-            if "id" in item:
-                yuz_id_listesi.append(item["id"])
-        print(f"Toplam {len(yuz_id_listesi)} adet klasik yüz ID'si toplandı!")
-    else:
-        print(f"Roblox Kataloğuna bağlanılamadı. Durum Kodu: {response.status_code}")
-except Exception as e:
-    print(f"ID'ler toplanırken hata oluştu: {e}")
-
-# Eğer liste boş kaldıysa bulut makinesi çökmesin diye kontrol ekliyoruz
-if not yuz_id_listesi:
-    print("Hata: İndirilecek hiçbir yüz ID'si bulunamadı. Liste boş!")
-    yuz_id_listesi = [100253786] # Test amaçlı yedek bir ID koyuyoruz ki script boş dönmesin
-
-# 2. ADIM: Resimleri İndirme Dönemi
-for asset_id in yuz_id_listesi:
-    # Doğrudan PNG üreten güncel endpoint
-    url = f"https://www.roblox.com/asset-thumbnail/image?assetId={asset_id}&width=420&height=420&format=png"
-    print(f"ID {asset_id} PNG görseli çekiliyor...")
+for dosya_adi in dosyalar:
+    dosya_yolu = os.path.join(output_klasoru, dosya_adi)
     
+    # Dosyanın içeriğini okuyoruz
     try:
-        res = requests.get(url, headers=headers, stream=True, timeout=15)
-        if res.status_code == 200:
-            dosya_yolu = os.path.join(output_klasoru, f"{asset_id}.png")
-            with open(dosya_yolu, "wb") as f:
-                # Chunk chunk indirerek bellek hatalarını (RAM patlamalarını) önlüyoruz
-                for chunk in res.iter_content(chunk_size=8192):
-                    if chunk:
-                        f.write(chunk)
-            print(f"-> ID {asset_id} GERÇEK PNG OLARAK EKLENDİ. ✅")
-        else:
-            print(f"-> Hata: {asset_id} indirilemedi. Durum Kodu: {res.status_code}")
+        with open(dosya_yolu, "r", encoding="utf-8", errors="ignore") as f:
+            icerik = f.read()
     except Exception as e:
-        # Burada hata gelse bile 'continue' diyerek bir sonraki resme geçmesini sağlıyoruz
-        print(f"-> {asset_id} indirilirken beklenmedik bir hata oluştu ama atlanıyor: {e}")
+        print(f"{dosya_adi} okunurken hata oluştu: {e}")
         continue
 
-print("\nTüm yüzlerin indirme işlemi başarıyla bitti!")
+    # 2. ADIM: XML içindeki <Content name="TextureId"><url>...id=SAYI</url></Content> yapısını arıyoruz
+    # Bu düzenli ifade (Regex) dosyadaki gerçek resim ID'sini bulup çıkarır
+    match = re.search(r'name="TextureId">.*?id=(\d+)', icerik, re.DOTALL)
+    
+    if match:
+        gercek_resim_id = match.group(1)
+        print(f"[{dosya_adi}] İçindeki gerçek fotoğraf kodu bulundu: {gercek_resim_id}")
+        
+        # 3. ADIM: Bulunan gerçek ID ile doğrudan Roblox resim sunucusundan PNG'yi çekiyoruz
+        download_url = f"https://assetdelivery.roblox.com/v1/asset/?id={gercek_resim_id}"
+        
+        try:
+            res = requests.get(download_url, headers=headers, stream=True, timeout=15)
+            if res.status_code == 200:
+                # Eski XML içerikli dosyanın üzerine gerçek PNG verisini yazıyoruz
+                with open(dosya_yolu, "wb") as f:
+                    for chunk in res.iter_content(chunk_size=8192):
+                        if chunk:
+                            f.write(chunk)
+                print(f"-> {dosya_adi} başarıyla gerçek fotoğrafa dönüştürüldü! ✅")
+            else:
+                print(f"-> Resim sunucusundan indirilemedi. Durum kodu: {res.status_code}")
+        except Exception as e:
+            print(f"-> Resim indirilirken hata oluştu: {e}")
+            
+    else:
+        # Eğer dosya zaten bir resimse veya içinde TextureId yoksa dokunmuyoruz
+        print(f"[{dosya_adi}] İçinde yeni bir fotoğraf kodu bulunamadı veya zaten gerçek bir resim.")
+
+print("\nTüm klasör dönüştürme işlemi başarıyla tamamlandı!")
